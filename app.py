@@ -12,10 +12,10 @@ st.set_page_config(
     layout="centered"
 )
 
-# Resgata variáveis de ambiente do Render ou do .env local
+# Resgata as variáveis de ambiente (do Render ou do .env)
 api_key = os.getenv("OPENROUTER_API_KEY", "")
-# Define um modelo gratuito padrão moderno do OpenRouter caso não exista no ambiente
-model_env = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash")
+# Define o modelo padrão da Cohere caso não esteja configurado no ambiente
+model_env = os.getenv("OPENROUTER_MODEL", "cohere/command-r-08-2024")
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
@@ -25,42 +25,42 @@ if "messages" not in st.session_state:
 st.title("🚗 AutoDrive — Atendimento Virtual")
 st.write("Converse em tempo real com nosso consultor inteligente sobre o nosso estoque.")
 
-# Adiciona controle de seleção de modelo na barra lateral para facilitar testes e evitar erros 404
+# Barra lateral para controle de modelos da Cohere e alternativas
 with st.sidebar:
-    st.markdown("### ⚙️ Configurações")
+    st.markdown("### ⚙️ Configurações de IA")
     selected_model = st.selectbox(
-        "Selecione o Modelo de IA:",
+        "Selecione o Modelo:",
         options=[
+            "cohere/command-r-08-2024",
+            "cohere/command-r-plus-08-2024",
             "google/gemini-2.5-flash",
-            "meta-llama/llama-3-8b-instruct:free",
-            "mistralai/mistral-7b-instruct:free",
-            "google/gemma-2-9b-it:free"
+            "meta-llama/llama-3.3-70b-instruct:free"
         ],
-        index=0
+        index=0  # Mantém o Cohere Command R como primeira opção padrão
     )
-    st.info("Caso o modelo padrão falhe com erro 404, mude o seletor acima para testar outra IA gratuita disponível no OpenRouter.")
+    st.info("O Command R da Cohere é excelente para entender o estoque e manter conversas fluidas com os clientes!")
 
 # Define o modelo ativo
 active_model = selected_model if selected_model else model_env
 
 if not api_key:
-    st.error("⚠️ Chave de API do OpenRouter não configurada. Certifique-se de definir a variável 'OPENROUTER_API_KEY' nas configurações de ambiente (Environment) do seu painel do Render ou no arquivo local .env.")
+    st.error("⚠️ Chave de API do OpenRouter não encontrada. Configure a variável 'OPENROUTER_API_KEY' nas configurações de ambiente (Environment) do painel do Render.")
 else:
-    # Instancia o agente com os parâmetros tratados
+    # Instancia o agente de vendas
     agent = SalesAgent(api_key=api_key, model=active_model)
 
-    # Renderiza o histórico de conversação
+    # Exibe o histórico de conversa
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # Captura a nova mensagem do usuário
+    # Entrada do usuário
     if user_input := st.chat_input("Digite sua mensagem aqui..."):
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.write(user_input)
 
-        # Solicita a resposta do agente inteligente
+        # Gera a resposta com o assistente
         with st.chat_message("assistant"):
             with st.spinner("Consultando estoque..."):
                 history_payload = [
