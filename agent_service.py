@@ -3,10 +3,11 @@ import logging
 import requests
 from typing import Dict, Any, List
 
+# Configuração de logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Estoque real de veículos da AutoDrive
+# Inventário de veículos simulado para o Agente ter como referência real
 VEHICLE_INVENTORY = [
     {
         "marca": "Toyota",
@@ -51,15 +52,17 @@ VEHICLE_INVENTORY = [
 ]
 
 class SalesAgent:
-    """Orquestrador do Agente de Vendas."""
+    """Orquestrador do Agente de Vendas com integração direta com OpenRouter."""
     
     def __init__(self, api_key: str, model: str):
         self.api_key = api_key
         self.model = model
+        # URL oficial do endpoint do OpenRouter corrigida
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         self.system_prompt = self._build_system_prompt()
 
     def _build_system_prompt(self) -> str:
+        """Configura a personalidade do vendedor e passa a lista de veículos."""
         inventory_str = ""
         for car in VEHICLE_INVENTORY:
             inventory_str += (
@@ -69,25 +72,29 @@ class SalesAgent:
             )
 
         return (
-            "Você é o 'Consultor AutoDrive', um assistente virtual de vendas de veículos. "
-            "Seu tom deve ser profissional, prestativo e focado em fechar negócios.\n\n"
+            "Você é o 'Consultor AutoDrive', um assistente virtual e consultor de vendas de veículos. "
+            "Seu tom deve ser extremamente profissional, entusiasmado, prestativo e persuasivo.\n\n"
             "### ESTOQUE ATUAL DA CONCESSIONÁRIA:\n"
             f"{inventory_str}\n"
-            "### REGRAS:\n"
-            "1. Sempre direcione o cliente para os carros do estoque acima.\n"
-            "2. Se ele pedir um carro fora da lista, diga que não tem e ofereça um similar da lista.\n"
-            "3. Se ele demonstrar interesse real, peça o NOME e o TELEFONE para agendamento."
+            "### REGRAS DE ATENDIMENTO:\n"
+            "1. Sempre tente indicar um dos carros do nosso estoque listados acima.\n"
+            "2. Se o cliente pedir um carro fora da lista, diga educadamente que não o temos no momento e ofereça "
+            "uma das opções que nós temos no estoque real.\n"
+            "3. Se o cliente demonstrar intenção de compra ou quiser agendar uma visita, peça educadamente o NOME e o TELEFONE."
         )
 
     def generate_response(self, chat_history: List[Dict[str, str]]) -> str:
+        """Envia o histórico de mensagens para o OpenRouter e retorna a resposta de vendas."""
         if not self.api_key:
-            return "Erro: Configure a sua chave de API do OpenRouter."
+            return "Erro: Chave de API do OpenRouter não configurada no sistema."
 
+        # Garante a inserção das regras do prompt de sistema antes do histórico do usuário
         messages = [{"role": "system", "content": self.system_prompt}] + chat_history
 
+        # Cabeçalhos limpos requisitados pelo protocolo da API
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
         }
 
         payload = {
@@ -97,9 +104,19 @@ class SalesAgent:
         }
 
         try:
+            logger.info(f"Enviando POST para {self.api_url} com o modelo {self.model}")
             response = requests.post(self.api_url, json=payload, headers=headers, timeout=15)
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"]
+            
+            if "choices" in data and len(data["choices"]) > 0:
+                return data["choices"][0]["message"]["content"]
+            else:
+                return "Desculpe, a API do OpenRouter retornou um formato de resposta vazio."
+                
+        except requests.exceptions.HTTPError as http_err:
+            logger.error(f"Erro HTTP encontrado: {http_err}")
+            return f"Erro de comunicação de rede ({response.status_code}): Certifique-se de que sua chave de API está ativa e que o modelo selecionado é suportado."
         except Exception as e:
-            return f"Erro de conexão com o OpenRouter: {e}"
+            logger.error(f"Erro geral: {e}")
+            return f"Ocorreu um erro ao processar sua resposta: {str(e)}"
